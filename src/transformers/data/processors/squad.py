@@ -302,6 +302,7 @@ def squad_convert_examples_to_features(
     return_dataset=False,
     threads=1,
     tqdm_enabled=True,
+    use_thread=True
 ):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model.
@@ -342,23 +343,27 @@ def squad_convert_examples_to_features(
     # Defining helper methods
     features = []
     threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
-        annotate_ = partial(
-            squad_convert_example_to_features,
-            max_seq_length=max_seq_length,
-            doc_stride=doc_stride,
-            max_query_length=max_query_length,
-            padding_strategy=padding_strategy,
-            is_training=is_training,
-        )
-        features = list(
-            tqdm(
-                p.imap(annotate_, examples, chunksize=32),
-                total=len(examples),
-                desc="convert squad examples to features",
-                disable=not tqdm_enabled,
+    if use_thread:
+        with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+            annotate_ = partial(
+                squad_convert_example_to_features,
+                max_seq_length=max_seq_length,
+                doc_stride=doc_stride,
+                max_query_length=max_query_length,
+                padding_strategy=padding_strategy,
+                is_training=is_training,
             )
-        )
+            features = list(
+                tqdm(
+                    p.imap(annotate_, examples, chunksize=32),
+                    total=len(examples),
+                    desc="convert squad examples to features",
+                    disable=not tqdm_enabled,
+                )
+            )
+    else:
+        squad_convert_example_to_features_init(tokenizer)
+        features = [squad_convert_example_to_features(examples[0], max_seq_length, doc_stride, max_query_length, padding_strategy, is_training)]
     new_features = []
     unique_id = 1000000000
     example_index = 0
